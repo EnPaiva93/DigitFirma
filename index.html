@@ -266,33 +266,48 @@ const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
 
 async function renderPage(n){
   const page = await pdfDoc.getPage(n);
+
   const natural = page.getViewport({scale:1});
   const wrap = document.getElementById('viewer-wrap');
   const inner = document.getElementById('viewer-wrap-inner');
+
   const vw = wrap.clientWidth - 40;
   const vh = wrap.clientHeight - 40;
+
   let scale;
   if(zoomMode==='width')  scale = Math.max(0.1, vw/natural.width);
   else if(zoomMode==='page') scale = Math.max(0.1, Math.min(vw/natural.width, vh/natural.height));
   else scale = manualScale;
+
   viewport = page.getViewport({scale});
 
-  // Si entra en el campo, centrar. Si supera el ancho, alinear a la izquierda
-  // para que el scroll horizontal sea estable y no haya saltos laterales.
+  // 🔥 IMPORTANTE: crear buffer primero
+  const off = document.createElement('canvas');
+  off.width = viewport.width;
+  off.height = viewport.height;
+
+  await page.render({
+    canvasContext: off.getContext('2d'),
+    viewport
+  }).promise;
+
+  // 🔥 recién ahora tocar el canvas visible
+  const c = document.getElementById('pdf-canvas');
+  c.width = viewport.width;
+  c.height = viewport.height;
+
+  c.getContext('2d').drawImage(off, 0, 0);
+
+  // alineación (tu fix anterior)
   if(inner){
     inner.style.alignItems = viewport.width <= vw ? 'center' : 'flex-start';
   }
-  const c = document.getElementById('pdf-canvas');
-  const off = document.createElement('canvas');
-  off.width=viewport.width; off.height=viewport.height;
-  await page.render({canvasContext:off.getContext('2d'), viewport}).promise;
-  c.width=viewport.width; c.height=viewport.height;
-  c.getContext('2d').drawImage(off,0,0);
-  // No forzar minWidth dinámico: el canvas ya define el ancho real del layout.
+
   document.getElementById('page-info').textContent = n+' / '+totalPages;
   document.getElementById('btn-prev').disabled = n<=1;
   document.getElementById('btn-next').disabled = n>=totalPages;
   document.getElementById('zoom-label').textContent = Math.round(scale*100)+'%';
+
   if(sig.visible && sig.page===n) applyBox();
   else document.getElementById('sig-box').style.display='none';
 }
