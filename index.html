@@ -47,9 +47,9 @@ input[type=file]{display:none}
 .pw-wrap input{padding-right:30px}
 .pw-eye{position:absolute;right:7px;top:50%;transform:translateY(-50%);cursor:pointer;background:none;border:none;color:#888;font-size:14px;line-height:1;padding:0}
 .hint{font-size:11px;color:#664d03;background:#fff3cd;border:1px solid #ffecb5;border-radius:4px;padding:7px 9px;margin-top:8px;line-height:1.5}
-#viewer-wrap{flex:1;overflow:auto;min-width:0;background:#525659}
-#viewer-wrap-inner{padding:20px;min-width:100%;min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:12px}
-#canvas-wrap{position:relative;display:block;box-shadow:0 4px 20px rgba(0,0,0,.4);flex-shrink:0}
+#viewer-wrap{flex:1;overflow:auto;min-width:0;background:#525659;display:flex;flex-direction:column}
+#viewer-wrap-inner{padding:20px;width:100%;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start}
+#canvas-wrap{position:relative;display:block;box-shadow:0 4px 20px rgba(0,0,0,.4);flex-shrink:0;margin:0}
 #pdf-canvas{display:block}
 #sig-overlay{position:absolute;top:0;left:0;width:100%;height:100%;cursor:crosshair;display:none;touch-action:none;z-index:10}
 #sig-box{position:absolute;display:none;touch-action:none;z-index:20;cursor:default}
@@ -64,8 +64,7 @@ input[type=file]{display:none}
 #sig-box .mv{position:absolute;inset:8px;cursor:move}
 #sig-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 /* FIX 1: empty state sin SVG de fondo */
-#empty-state{color:#bbb;text-align:center;padding:48px 20px;user-select:none}
-#empty-state p{font-size:14px;margin-top:0}
+#empty-state{color:#bbb;text-align:center;padding:48px 20px;user-select:none}#empty-state p{font-size:14px;margin-top:0}
 #page-nav{display:none;align-items:center;gap:8px;background:#3c3c3c;color:#fff;padding:5px 14px;font-size:12px;flex-shrink:0}
 #page-nav button{background:#555;border:none;color:#fff;padding:3px 10px;border-radius:3px;cursor:pointer;font-size:12px}
 #page-nav button:disabled{opacity:.4}
@@ -152,10 +151,8 @@ input[type=file]{display:none}
   </div>
 
   <div id="viewer-wrap">
+    <div id="empty-state"><p>Cargá un PDF para comenzar</p></div>
     <div id="viewer-wrap-inner">
-    <div id="empty-state">
-      <p>Cargá un PDF para comenzar</p>
-    </div>
     <div id="canvas-wrap" style="display:none">
       <canvas id="pdf-canvas"></canvas>
       <div id="sig-overlay"></div>
@@ -179,13 +176,7 @@ input[type=file]{display:none}
   <button id="btn-next" onclick="changePage(1)">›</button>
 </div>
 <div id="zoom-bar">
-  <button class="znav" onclick="zoomStep(-1)" title="Alejar">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-  </button>
   <span id="zoom-label">100%</span>
-  <button class="znav" onclick="zoomStep(1)" title="Acercar">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-  </button>
   <div style="width:1px;background:#555;height:16px;flex-shrink:0"></div>
   <button class="znav" onclick="zoomFitWidth()" title="Ajustar al ancho">
     <svg width="16" height="13" viewBox="0 0 20 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="18" height="14" rx="1"/><polyline points="5,5 1,8 5,11"/><polyline points="15,5 19,8 15,11"/></svg>
@@ -241,16 +232,15 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 let pdfDoc = null, pdfOrigBytes = null;
 let p12Bytes = null, certCN = '';
 let currentPage = 1, totalPages = 1, viewport = null;
-let placing = false;
-// sig almacena coordenadas en espacio PDF (puntos), no píxeles de pantalla
+let placing = false, signed = false;
 let sig = { visible:false, pdfX:0, pdfY:0, pdfW:0, pdfH:0, page:1 };
-// helpers para convertir entre espacios
-function sigToScreen(){ const sc=viewport.scale; return { x:sig.pdfX*sc, y:sig.pdfY*sc, w:sig.pdfW*sc, h:sig.pdfH*sc }; }
-function screenToPdf(x,y,w,h){ const sc=viewport.scale; return { pdfX:x/sc, pdfY:y/sc, pdfW:w/sc, pdfH:h/sc }; }
 let drag = { active:false, type:'', dir:'', ox:0, oy:0, sx:0, sy:0, sw:0, sh:0 };
 
-const status = t => document.getElementById('status-bar').textContent = t;
+function getViewport(){ return viewport; }
+function sigToScreen(){ const sc=viewport?viewport.scale:1; return {x:sig.pdfX*sc,y:sig.pdfY*sc,w:sig.pdfW*sc,h:sig.pdfH*sc}; }
+function screenToPdf(x,y,w,h){ const sc=viewport?viewport.scale:1; return {pdfX:x/sc,pdfY:y/sc,pdfW:w/sc,pdfH:h/sc}; }
 
+const status = t => document.getElementById('status-bar').textContent = t;
 function toggleSidebar(){ document.getElementById('sidebar').classList.toggle('open'); }
 
 async function loadPDF(inp){
@@ -262,7 +252,7 @@ async function loadPDF(inp){
   document.getElementById('pdf-name').textContent = file.name;
   document.getElementById('box-pdf').classList.add('done');
   document.getElementById('empty-state').style.display = 'none';
-  document.getElementById('canvas-wrap').style.display = 'inline-block';
+  document.getElementById('canvas-wrap').style.display = 'block';
   document.getElementById('page-nav').style.display = totalPages > 1 ? 'flex' : 'none';
   document.getElementById('zoom-bar').style.display = 'flex';
   await renderPage(currentPage);
@@ -271,63 +261,176 @@ async function loadPDF(inp){
   if(window.innerWidth <= 640) document.getElementById('sidebar').classList.remove('open');
 }
 
-let zoomMode = 'width'; // 'width' | 'page' | 'manual'
-let manualScale = 1;
+let zoomMode = 'width', manualScale = 1;
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
 
 async function renderPage(n){
   const page = await pdfDoc.getPage(n);
   const natural = page.getViewport({scale:1});
-
-  // Resetear minWidth para medir el espacio real disponible
-  const inner = document.getElementById('viewer-wrap-inner');
-  inner.style.minWidth = '';
   const wrap = document.getElementById('viewer-wrap');
+  const inner = document.getElementById('viewer-wrap-inner');
   const vw = wrap.clientWidth - 40;
   const vh = wrap.clientHeight - 40;
-
   let scale;
-  if(zoomMode === 'width')  scale = Math.max(0.1, vw / natural.width);
-  else if(zoomMode === 'page') scale = Math.max(0.1, Math.min(vw / natural.width, vh / natural.height));
+  if(zoomMode==='width')  scale = Math.max(0.1, vw/natural.width);
+  else if(zoomMode==='page') scale = Math.max(0.1, Math.min(vw/natural.width, vh/natural.height));
   else scale = manualScale;
-
   viewport = page.getViewport({scale});
+
+  // Si entra en el campo, centrar. Si supera el ancho, alinear a la izquierda
+  // para que el scroll horizontal sea estable y no haya saltos laterales.
+  if(inner){
+    inner.style.alignItems = viewport.width <= vw ? 'center' : 'flex-start';
+  }
   const c = document.getElementById('pdf-canvas');
-  c.width = viewport.width; c.height = viewport.height;
-  await page.render({canvasContext: c.getContext('2d'), viewport}).promise;
+  const off = document.createElement('canvas');
+  off.width=viewport.width; off.height=viewport.height;
+  await page.render({canvasContext:off.getContext('2d'), viewport}).promise;
+  c.width=viewport.width; c.height=viewport.height;
+  c.getContext('2d').drawImage(off,0,0);
+  // No forzar minWidth dinámico: el canvas ya define el ancho real del layout.
+  document.getElementById('page-info').textContent = n+' / '+totalPages;
+  document.getElementById('btn-prev').disabled = n<=1;
+  document.getElementById('btn-next').disabled = n>=totalPages;
+  document.getElementById('zoom-label').textContent = Math.round(scale*100)+'%';
+  if(sig.visible && sig.page===n) applyBox();
+  else document.getElementById('sig-box').style.display='none';
+}
 
-  // Ancho del inner: al menos el del canvas para habilitar scroll horizontal
-  // El centrado lo hace flexbox cuando el canvas es más chico que el wrap
-  inner.style.minWidth = Math.max(wrap.clientWidth, viewport.width + 40) + 'px';
+function zoomFitWidth(){ zoomMode='width';  renderPage(currentPage); }
+function zoomFitPage(){  zoomMode='page';   renderPage(currentPage); }
+function changePage(d){ currentPage=Math.max(1,Math.min(totalPages,currentPage+d)); renderPage(currentPage); }
 
-  document.getElementById('page-info').textContent = n + ' / ' + totalPages;
-  document.getElementById('btn-prev').disabled = n <= 1;
-  document.getElementById('btn-next').disabled = n >= totalPages;
-  document.getElementById('zoom-label').textContent = Math.round(scale * 100) + '%';
+// ZOOM - PARTE 1 + PARTE 2
+// Sin transform, sin animación doble.
+// Parte 1: si el PDF entra en el ancho útil, queda top-center.
+// Parte 2: si el PDF ocupa/supera el ancho útil, el zoom sigue el puntero.
+let _zoomRenderId = 0;
+let _zoomRendering = false;
+let _queuedWheelZoom = null;
 
-  // Centrar horizontalmente si el canvas cabe en el ancho
-  if(viewport.width < wrap.clientWidth){
-    wrap.scrollLeft = 0;
+function clampScale(s){
+  return Math.max(0.25, Math.min(5, s));
+}
+
+function getWorkAreaWidth(){
+  const wrap = document.getElementById('viewer-wrap');
+  return Math.max(0, wrap.clientWidth - 40); // 20px izquierda + 20px derecha
+}
+
+function getNaturalPdfWidth(){
+  if(!viewport || !viewport.scale) return 0;
+  return viewport.width / viewport.scale;
+}
+
+function pdfFitsWorkAreaAt(scale){
+  const naturalWidth = getNaturalPdfWidth();
+  if(!naturalWidth) return false;
+  return naturalWidth * scale <= getWorkAreaWidth();
+}
+
+function getCanvasDocumentOffset(){
+  const wrap = document.getElementById('viewer-wrap');
+  const canvasWrap = document.getElementById('canvas-wrap');
+  const wr = wrap.getBoundingClientRect();
+  const cr = canvasWrap.getBoundingClientRect();
+
+  return {
+    left: cr.left - wr.left + wrap.scrollLeft,
+    top:  cr.top  - wr.top  + wrap.scrollTop
+  };
+}
+
+async function zoomTo(scale, anchor){
+  scale = clampScale(scale);
+
+  if(_zoomRendering){
+    _queuedWheelZoom = { scale, anchor };
+    return;
   }
 
-  if(sig.visible && sig.page === n) applyBox();
-  else document.getElementById('sig-box').style.display = 'none';
-}
+  _zoomRendering = true;
+  const renderId = ++_zoomRenderId;
 
-function zoomFitWidth(){ zoomMode='width'; renderPage(currentPage); }
-function zoomFitPage(){  zoomMode='page';  renderPage(currentPage); }
-function zoomStep(dir){
-  // get current scale
-  const cur = viewport ? viewport.scale : 1;
-  let idx = ZOOM_STEPS.findIndex(s => s >= cur - 0.01);
-  if(idx < 0) idx = ZOOM_STEPS.length - 1;
-  const next = dir > 0 ? Math.min(idx + 1, ZOOM_STEPS.length - 1) : Math.max(idx - 1, 0);
-  manualScale = ZOOM_STEPS[next];
+  const wrap = document.getElementById('viewer-wrap');
+  const canvasWrap = document.getElementById('canvas-wrap');
+
+  canvasWrap.style.display = 'block';
+  canvasWrap.style.transform = '';
+  canvasWrap.style.visibility = 'visible';
+
+  const oldScale = viewport?.scale || manualScale || 1;
+  const beforeOffset = getCanvasDocumentOffset();
+
+  let anchorData = null;
+  if(anchor && anchor.type === 'pointer'){
+    const wr = wrap.getBoundingClientRect();
+    const offsetX = anchor.clientX - wr.left;
+    const offsetY = anchor.clientY - wr.top;
+
+    anchorData = {
+      type: 'pointer',
+      offsetX,
+      offsetY,
+      pdfX: (wrap.scrollLeft + offsetX - beforeOffset.left) / oldScale,
+      pdfY: (wrap.scrollTop  + offsetY - beforeOffset.top)  / oldScale
+    };
+  } else {
+    anchorData = { type: 'top-center' };
+  }
+
+  manualScale = scale;
   zoomMode = 'manual';
-  renderPage(currentPage);
+  document.getElementById('zoom-label').textContent = Math.round(scale * 100) + '%';
+
+  try {
+    await renderPage(currentPage);
+
+    if(renderId === _zoomRenderId){
+      const afterOffset = getCanvasDocumentOffset();
+
+      // Corregir el scroll inmediatamente, no en el siguiente frame.
+      // Esto evita el micro-salto visible después de cambiar width/height del canvas.
+      if(anchorData.type === 'pointer'){
+        wrap.scrollLeft = Math.max(0, afterOffset.left + anchorData.pdfX * scale - anchorData.offsetX);
+        wrap.scrollTop  = Math.max(0, afterOffset.top  + anchorData.pdfY * scale - anchorData.offsetY);
+      } else {
+        wrap.scrollLeft = 0;
+        wrap.scrollTop = 0;
+      }
+
+      canvasWrap.style.display = 'block';
+      canvasWrap.style.visibility = 'visible';
+    }
+  } finally {
+    _zoomRendering = false;
+
+    if(_queuedWheelZoom !== null){
+      const next = _queuedWheelZoom;
+      _queuedWheelZoom = null;
+      zoomTo(next.scale, next.anchor);
+    }
+  }
 }
 
-function changePage(d){ currentPage = Math.max(1, Math.min(totalPages, currentPage+d)); renderPage(currentPage); }
+document.getElementById('viewer-wrap').addEventListener('wheel', e => {
+  if(!e.ctrlKey || !pdfDoc || !viewport) return;
+
+  const baseScale = _queuedWheelZoom?.scale || manualScale || viewport.scale || 1;
+  const factor = e.deltaY < 0 ? 1.08 : 0.925;
+  const nextScale = clampScale(baseScale * factor);
+
+  e.preventDefault();
+
+  if(pdfFitsWorkAreaAt(nextScale)){
+    // Parte 1: todavía entra completo; top-center fijo.
+    zoomTo(nextScale, { type: 'top-center' });
+  } else {
+    // Parte 2: ya ocupa/supera el ancho; seguir puntero.
+    zoomTo(nextScale, { type: 'pointer', clientX: e.clientX, clientY: e.clientY });
+  }
+},{passive:false});
+
 
 async function loadP12(inp){
   const file = inp.files[0]; if(!file) return;
@@ -468,6 +571,7 @@ sigBox.querySelectorAll('.rh').forEach(h => {
 });
 
 function startDrag(e,type,dir=''){
+  if(signed) return; // bloqueado tras firmar
   e.stopPropagation(); e.preventDefault();
   const p=wrapPos(e);
   const s=sigToScreen();
@@ -535,7 +639,7 @@ function nowStr(){
   const d=new Date(), p=n=>String(n).padStart(2,'0');
   const tz=-d.getTimezoneOffset(), s=tz>=0?'+':'-';
   const th=Math.floor(Math.abs(tz)/60), tm=Math.abs(tz)%60;
-  return `${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())} ${s}${p(th)}'${p(tm)}'`;
+  return `${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())} ${s}${p(th)}:${p(tm)}`;
 }
 
 function drawSignature(){
@@ -676,17 +780,84 @@ async function doSign(){
     const pdfX=sig.pdfX, pdfY=ph-(sig.pdfY+sig.pdfH);
     const pdfW=sig.pdfW, pdfH=sig.pdfH;
 
-    // Imagen a resolución de pantalla actual
-    const s=sigToScreen();
-    const HR=2;
-    const imgC=document.createElement('canvas');
-    imgC.width=Math.round(s.w*HR); imgC.height=Math.round(s.h*HR);
-    renderSigCtx(imgC.getContext('2d'),imgC.width,imgC.height,certCN,nowStr(),reason,location);
+    // Fix 3: firma vectorial con pdf-lib (no imagen PNG)
+    const { rgb, StandardFonts } = PDFLib;
+    const fontBold   = await doc.embedFont(StandardFonts.HelveticaBold);
+    const fontNormal = await doc.embedFont(StandardFonts.Helvetica);
 
-    const pngBlob=await new Promise(r=>imgC.toBlob(b=>r(b),'image/png'));
-    const pngBytes=await pngBlob.arrayBuffer();
-    const pngEmbed=await doc.embedPng(pngBytes);
-    page.drawImage(pngEmbed,{x:pdfX,y:pdfY,width:pdfW,height:pdfH});
+    // Fondo blanco
+    page.drawRectangle({ x:pdfX, y:pdfY, width:pdfW, height:pdfH, color:rgb(1,1,1) });
+    // Borde
+    page.drawRectangle({ x:pdfX, y:pdfY, width:pdfW, height:pdfH, borderColor:rgb(0.67,0.67,0.67), borderWidth:0.5, color:rgb(1,1,1,0) });
+
+    const divX = pdfX + pdfW * 0.36;
+    // Línea divisora
+    page.drawLine({ start:{x:divX, y:pdfY+2}, end:{x:divX, y:pdfY+pdfH-2}, color:rgb(0.8,0.8,0.8), thickness:0.5 });
+
+    // Zona izquierda: nombre en grande
+    const nameWords = certCN.toUpperCase().split(' ');
+    const nameLinesPdf = [];
+    for(let i=0;i<nameWords.length;i+=2) nameLinesPdf.push(nameWords.slice(i,i+2).join(' '));
+    const leftW = pdfW * 0.36 - 4;
+    let leftFs = Math.min(pdfH * 0.32, 14);
+    // reducir hasta que quepa
+    for(;;){
+      const maxW = nameLinesPdf.reduce((m,l)=>Math.max(m, fontBold.widthOfTextAtSize(l,leftFs)),0);
+      if(maxW <= leftW || leftFs <= 4) break;
+      leftFs -= 0.5;
+    }
+    const leftLh = leftFs * 1.3;
+    const leftTotalH = nameLinesPdf.length * leftLh;
+    let leftY = pdfY + (pdfH + leftTotalH) / 2 - leftLh * 0.2;
+    nameLinesPdf.forEach(l => {
+      page.drawText(l, { x:pdfX+3, y:leftY, size:leftFs, font:fontBold, color:rgb(0.04,0.04,0.04) });
+      leftY -= leftLh;
+    });
+
+    // Zona derecha: bloque de texto
+    const rx = divX + 3;
+    const availW = pdfX + pdfW - rx - 3;
+    const pad = 2;
+
+    function pdfWrapText(text, font, size, maxW){
+      const words = text.split(' '); const lines = []; let cur = '';
+      words.forEach(w => {
+        const t = cur ? cur+' '+w : w;
+        if(font.widthOfTextAtSize(t, size) > maxW && cur){ lines.push(cur); cur=w; } else cur=t;
+      });
+      if(cur) lines.push(cur); return lines;
+    }
+
+    // calcular tamaños que quepan en altura
+    let lbFs=6, nmFs=7, dtFs=5.5;
+    const scale2 = pdfH / 60;
+    lbFs = Math.max(4, 6 * scale2);
+    nmFs = Math.max(5, 7 * scale2);
+    dtFs = Math.max(4, 5 * scale2);
+
+    const lbLines2 = pdfWrapText('Firmado digitalmente por', fontNormal, lbFs, availW);
+    const nmLines2 = pdfWrapText(certCN.toUpperCase(), fontBold, nmFs, availW);
+    const dtStr    = nowStr();
+    const dtLines2 = pdfWrapText('Fecha: '+dtStr, fontNormal, dtFs, availW);
+    const rsLines2 = reason   ? pdfWrapText('Razon: '+reason,   fontNormal, dtFs, availW) : [];
+    const lcLines2 = location ? pdfWrapText('Lugar: '+location, fontNormal, dtFs, availW) : [];
+
+    const totalH2 = lbLines2.length*(lbFs+1) + nmLines2.length*(nmFs+1) + 2 +
+                    (dtLines2.length+rsLines2.length+lcLines2.length)*(dtFs+1);
+    let ry2 = pdfY + pdfH - pad - (pdfH - totalH2)/2 - lbFs;
+
+    const drawPdfLines = (lines, font, size, color) => {
+      lines.forEach(l => {
+        page.drawText(l, { x:rx, y:ry2, size, font, color });
+        ry2 -= size + 1;
+      });
+    };
+    drawPdfLines(lbLines2, fontNormal, lbFs, rgb(0.33,0.33,0.33));
+    drawPdfLines(nmLines2, fontBold,   nmFs, rgb(0,0,0));
+    ry2 -= 2;
+    drawPdfLines(dtLines2, fontNormal, dtFs, rgb(0.13,0.13,0.13));
+    drawPdfLines(rsLines2, fontNormal, dtFs, rgb(0.13,0.13,0.13));
+    drawPdfLines(lcLines2, fontNormal, dtFs, rgb(0.13,0.13,0.13));
 
     const withVisual=await doc.save();
 
@@ -712,6 +883,10 @@ async function doSign(){
     const a=Object.assign(document.createElement('a'),{href:url,download:filename});
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(url),5000);
+    signed = true;
+    document.getElementById('sig-box').classList.add('deselected');
+    document.getElementById('btn-place').disabled = true;
+    document.getElementById('btn-sign').disabled = true;
     status('✅ PDF firmado descargado: '+filename);
   } catch(err){
     console.error(err); status('❌ Error: '+err.message);
@@ -851,71 +1026,6 @@ async function doVerifySidebar(inp){
       ${c.location!=='—'?`<div style="color:#555"><b>Lugar:</b> ${c.location}</div>`:''}
     </div>`).join('');
 }
-
-// Zoom hacia el puntero / centro del pinch
-async function zoomToPoint(newScale, clientX, clientY){
-  const wrap = document.getElementById('viewer-wrap');
-  // Posición del puntero relativa al contenido (antes del zoom)
-  const contentX = wrap.scrollLeft + clientX - wrap.getBoundingClientRect().left;
-  const contentY = wrap.scrollTop  + clientY - wrap.getBoundingClientRect().top;
-  // Ratio del punto dentro del contenido actual
-  const inner = document.getElementById('viewer-wrap-inner');
-  const oldW = inner.scrollWidth;
-  const oldH = inner.scrollHeight;
-  const ratioX = contentX / oldW;
-  const ratioY = contentY / oldH;
-
-  manualScale = newScale;
-  zoomMode = 'manual';
-  await renderPage(currentPage);
-
-  // Ajustar scroll para que el mismo punto quede bajo el puntero
-  const newW = inner.scrollWidth;
-  const newH = inner.scrollHeight;
-  wrap.scrollLeft = ratioX * newW - (clientX - wrap.getBoundingClientRect().left);
-  wrap.scrollTop  = ratioY * newH - (clientY - wrap.getBoundingClientRect().top);
-}
-
-// Ctrl+rueda → zoom hacia el puntero
-document.getElementById('viewer-wrap').addEventListener('wheel', e=>{
-  if(!e.ctrlKey || !pdfDoc) return;
-  e.preventDefault();
-  const cur = viewport ? viewport.scale : 1;
-  const idx = ZOOM_STEPS.findIndex(s => s >= cur - 0.01);
-  const i   = idx < 0 ? ZOOM_STEPS.length - 1 : idx;
-  const next = e.deltaY < 0 ? Math.min(i+1, ZOOM_STEPS.length-1) : Math.max(i-1, 0);
-  if(ZOOM_STEPS[next] === cur) return;
-  zoomToPoint(ZOOM_STEPS[next], e.clientX, e.clientY);
-},{passive:false});
-
-// Pinch zoom → zoom hacia el centro del pinch
-let _pinchDist = null, _pinchCX = 0, _pinchCY = 0;
-document.getElementById('viewer-wrap').addEventListener('touchstart', e=>{
-  if(e.touches.length === 2){
-    _pinchDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-    _pinchCX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-    _pinchCY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-  }
-},{passive:true});
-document.getElementById('viewer-wrap').addEventListener('touchmove', e=>{
-  if(e.touches.length!==2 || _pinchDist===null || !pdfDoc) return;
-  e.preventDefault();
-  const dist  = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-  const ratio = dist / _pinchDist;
-  if(Math.abs(ratio-1) < 0.04) return;
-  const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-  const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-  const cur = viewport ? viewport.scale : 1;
-  const idx = ZOOM_STEPS.findIndex(s => s >= cur - 0.01);
-  const i   = idx < 0 ? ZOOM_STEPS.length-1 : idx;
-  const next = ratio > 1 ? Math.min(i+1, ZOOM_STEPS.length-1) : Math.max(i-1, 0);
-  if(ZOOM_STEPS[next] !== cur){
-    zoomToPoint(ZOOM_STEPS[next], cx, cy);
-    _pinchDist = dist;
-    _pinchCX = cx; _pinchCY = cy;
-  }
-},{passive:false});
-document.getElementById('viewer-wrap').addEventListener('touchend', e=>{ if(e.touches.length<2) _pinchDist=null; },{passive:true});
 </script>
 </body>
 </html>
